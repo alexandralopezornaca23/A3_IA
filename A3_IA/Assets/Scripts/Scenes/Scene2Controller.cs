@@ -18,20 +18,36 @@ namespace AI.Scenes
         [Header("Formación")]
         public Vector3 formationCenter = Vector3.zero;
         public float circleRadius = 4f;
+        public float spacing = 2f;
 
         [Header("Clic")]
         public float clickProximityThreshold = 5f;
         public Camera mainCamera;
 
+        [Header("Comportamiento")]
+        [Tooltip("Segundos que esperan en el objetivo antes de volver a formar")]
+        public float reformDelay = 3f;
+
         private FormationManager formationManager;
+        private FormationPattern[] patterns;
+        private int currentPatternIndex;
         private BlackboardSystem blackboard;
+
+        private CirclePattern circlePattern;
+        private VPattern vPattern;
+        private LinePattern linePattern;
 
         void Start()
         {
             if (mainCamera == null) mainCamera = Camera.main;
 
-            formationManager = new FormationManager(
-                new CirclePattern(formationCenter, circleRadius));
+            circlePattern = new CirclePattern(formationCenter, circleRadius);
+            vPattern = new VPattern(formationCenter, spacing);
+            linePattern = new LinePattern(formationCenter, spacing);
+
+            patterns = new FormationPattern[] { circlePattern, vPattern, linePattern };
+
+            formationManager = new FormationManager(patterns[0]);
 
             foreach (AgentMovement agent in agents)
             {
@@ -40,14 +56,16 @@ namespace AI.Scenes
             }
 
             blackboard = new BlackboardSystem();
-            blackboard.RegisterExpert(new TargetExpert(agents, formationManager));
-
-            Debug.Log("Escena 2 Clic cerca de un agente para publicar objetivo.");
+            blackboard.SetData("patternIndex", 0);
+            blackboard.RegisterExpert(
+                new FormationMoveExpert(agents, formationManager, patterns, reformDelay));
         }
 
         void Update()
         {
-            formationManager.Update();
+            if (Keyboard.current.digit1Key.wasPressedThisFrame) ChangePattern(0);
+            if (Keyboard.current.digit2Key.wasPressedThisFrame) ChangePattern(1);
+            if (Keyboard.current.digit3Key.wasPressedThisFrame) ChangePattern(2);
 
             if (Mouse.current.leftButton.wasPressedThisFrame) HandleClick();
 
@@ -55,6 +73,16 @@ namespace AI.Scenes
             if (actions != null)
                 foreach (Action action in actions)
                     action?.Invoke();
+
+            formationManager.Update();
+        }
+
+        void ChangePattern(int index)
+        {
+            if (index == currentPatternIndex) return;
+            currentPatternIndex = index;
+            formationManager.SetPattern(patterns[currentPatternIndex]);
+            blackboard.SetData("patternIndex", currentPatternIndex);
         }
 
         void HandleClick()
@@ -74,12 +102,9 @@ namespace AI.Scenes
                     <= clickProximityThreshold)
                 {
                     blackboard.SetData("target", clickPoint);
-                    Debug.Log($"Objetivo publicado: {clickPoint}");
                     return;
                 }
             }
-
-            Debug.Log("Ningún agente dentro del umbral.");
         }
 
         void SetupSeparation(AgentMovement agent)

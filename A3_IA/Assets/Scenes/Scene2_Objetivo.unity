@@ -852,9 +852,11 @@ MonoBehaviour:
   - {fileID: 1984405819}
   - {fileID: 18079443}
   formationCenter: {x: 0, y: 0, z: 0}
-  circleRadius: 4
+  circleRadius: 5
+  spacing: 2
   clickProximityThreshold: 5
   mainCamera: {fileID: 330585545}
+  reformDelay: 10
 --- !u!1001 &1949452412
 PrefabInstance:
   m_ObjectHideFlags: 0

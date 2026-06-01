@@ -10,6 +10,7 @@ namespace AI.Blackboard.Experts
     {
         private readonly List<AgentMovement> agents;
         private readonly FormationManager formationManager;
+        private bool executed = false;
 
         public TargetExpert(List<AgentMovement> agents, FormationManager formationManager)
         {
@@ -17,20 +18,32 @@ namespace AI.Blackboard.Experts
             this.formationManager = formationManager;
         }
 
-        public override float GetInsistence(BlackboardSystem blackboard) =>
-            blackboard.HasKey("target") ? 0.95f : 0f;
+        public override float GetInsistence(BlackboardSystem blackboard)
+        {
+            // Solo actúa una vez por publicación de objetivo
+            if (!blackboard.HasKey("target")) { executed = false; return 0f; }
+            return executed ? 0f : 0.95f;
+        }
 
         public override Action[] Run(BlackboardSystem blackboard)
         {
             Vector3 target = blackboard.GetValue<Vector3>("target");
+            executed = true;
 
             return new Action[]
             {
                 () =>
                 {
+                    // Rompe la formación
                     formationManager.SetActive(false);
+
+                    // Resetea la patrulla de cada agente y manda al objetivo
                     foreach (AgentMovement agent in agents)
-                        agent?.SetTarget(target);
+                    {
+                        if (agent == null) continue;
+                        agent.ResetPatrol();
+                        agent.SetTarget(target);
+                    }
                 }
             };
         }
