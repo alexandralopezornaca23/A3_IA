@@ -3,6 +3,7 @@ using AI.Movement;
 
 namespace AI.Animation
 {
+    // Controla las animaciones del agente en funcion de su velocidad y estado de evasion
     [RequireComponent(typeof(AgentMovement))]
     public class AgentAnimatorController : MonoBehaviour
     {
@@ -13,10 +14,11 @@ namespace AI.Animation
         public float walkThreshold = 0.1f;
         public float runThreshold = 3f;
 
-        [Header("Duración del dodge")]
+        [Header("Duracion del dodge")]
         public float dodgeDuration = 1f;
 
-        // Hashes de parámetros
+        // Hashes para acceder a los parametros del Animator de forma eficiente
+        // Es mas rapido que pasar strings directamente cada frame
         private static readonly int SpeedHash = Animator.StringToHash("speed");
         private static readonly int IsDodgingHash = Animator.StringToHash("isDodging");
         private static readonly int DodgeXHash = Animator.StringToHash("dodgeX");
@@ -32,6 +34,8 @@ namespace AI.Animation
             agentMovement = GetComponent<AgentMovement>();
             avoidance = GetComponent<ObstacleAvoidanceBehaviour>();
 
+            // Si no se asigno el Animator en el Inspector, lo busca en los hijos
+            // El modelo de Mixamo es un hijo del GameObject del agente
             if (animator == null)
                 animator = GetComponentInChildren<Animator>();
         }
@@ -44,6 +48,8 @@ namespace AI.Animation
             UpdateDodgeParameter();
         }
 
+        // Actualiza el parametro speed del Animator con la velocidad actual del agente
+        // Usa Lerp para suavizar la transicion y evitar cambios bruscos entre estados
         void UpdateSpeedParameter()
         {
             float speed = agentMovement.agentData.velocity.magnitude;
@@ -52,21 +58,21 @@ namespace AI.Animation
             animator.SetFloat(SpeedHash, smoothSpeed);
         }
 
+        // Detecta cuando el agente empieza a esquivar y gestiona la duracion del dodge
         void UpdateDodgeParameter()
         {
             if (avoidance == null) return;
 
+            // Inicia el dodge cuando el componente de evasion se activa
             if (avoidance.IsAvoiding && !isDodging)
             {
                 isDodging = true;
                 dodgeTimer = dodgeDuration;
                 animator.SetBool(IsDodgingHash, true);
-
-                // Calcular la dirección del dodge en espacio local del agente
-                // para saber si esquiva hacia delante, atrás, izquierda o derecha
                 CalculateDodgeDirection();
             }
 
+            // Cuenta el tiempo del dodge y lo termina cuando se acaba
             if (isDodging)
             {
                 dodgeTimer -= Time.deltaTime;
@@ -75,38 +81,37 @@ namespace AI.Animation
                     isDodging = false;
                     animator.SetBool(IsDodgingHash, false);
 
-                    // Resetear los parámetros del blend tree
+                    // Resetea el Blend Tree para que vuelva al estado neutro
                     animator.SetFloat(DodgeXHash, 0f);
                     animator.SetFloat(DodgeZHash, 0f);
                 }
             }
         }
 
+        // Calcula hacia que direccion esquiva el agente y lo pasa al Blend Tree 2D
+        // El Blend Tree elige entre DodgeForward, DodgeBack, DodgeLeft y DodgeRight
         void CalculateDodgeDirection()
         {
             Vector3 avoidanceForce = agentMovement.agentData.velocity;
 
             if (avoidanceForce.magnitude < 0.01f) return;
 
-            // Convertir la fuerza de evasión a espacio local del agente
-            // para saber la dirección relativa al personaje
+            // Convierte la velocidad de evasion a espacio local del agente
+            // para saber la direccion relativa al personaje, no al mundo
             Vector3 localDirection = transform.InverseTransformDirection(avoidanceForce.normalized);
 
-            // Suavizar la asignación al blend tree
             float targetX = Mathf.Clamp(localDirection.x, -1f, 1f);
             float targetZ = Mathf.Clamp(localDirection.z, -1f, 1f);
 
-            // Normalizar para que el blend tree use siempre los extremos
-            // y no valores intermedios sucios
+            // Elige el eje predominante para que el Blend Tree use siempre
+            // una sola animacion limpia y no una mezcla intermedia
             if (Mathf.Abs(targetX) > Mathf.Abs(targetZ))
             {
-                // Esquive lateral predominante
                 targetX = Mathf.Sign(targetX);
                 targetZ = 0f;
             }
             else
             {
-                // Esquive frontal/trasero predominante
                 targetX = 0f;
                 targetZ = Mathf.Sign(targetZ);
             }
@@ -114,7 +119,6 @@ namespace AI.Animation
             animator.SetFloat(DodgeXHash, targetX);
             animator.SetFloat(DodgeZHash, targetZ);
 
-            // Log para debug
             string dir = targetZ > 0 ? "FRONT" :
                          targetZ < 0 ? "BACK" :
                          targetX > 0 ? "RIGHT" : "LEFT";

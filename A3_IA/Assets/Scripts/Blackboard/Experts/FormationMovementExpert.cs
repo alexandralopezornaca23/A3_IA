@@ -7,9 +7,9 @@ using AI.Formation.Patterns;
 
 namespace AI.Blackboard.Experts
 {
-    // Experto que:
-    // 1. Rompe la formación y manda todos los agentes al punto del clic
-    // 2. Tras reformDelay segundos, reactiva la formación con el nuevo centro
+    // Experto de la Escena 2 que gestiona el movimiento de la formacion en dos fases:
+    // Fase 1 - rompe la formacion y manda a todos los agentes al punto del clic
+    // Fase 2 - pasado reformDelay segundos, reactiva la formacion con el nuevo centro
     public class FormationMoveExpert : Expert
     {
         private readonly List<AgentMovement> agents;
@@ -17,6 +17,7 @@ namespace AI.Blackboard.Experts
         private readonly FormationPattern[] patterns;
         private readonly float reformDelay;
 
+        // Flags que controlan en que fase del comportamiento se encuentra el experto
         private bool executed = false;
         private bool reforming = false;
         private float reformTimer = 0f;
@@ -34,29 +35,36 @@ namespace AI.Blackboard.Experts
             this.reformDelay = reformDelay;
         }
 
+        // El arbitro llama a este metodo para saber cuanto quiere actuar este experto
+        // Devuelve 0.9 cuando hay un objetivo pendiente en la pizarra (fase 1)
+        // Devuelve 0.5 mientras espera para reformar (fase 2)
+        // Devuelve 0 cuando no hay nada que hacer
         public override float GetInsistence(BlackboardSystem blackboard)
         {
-            // Actualizar el índice del patrón activo desde la pizarra
+            // Lee el patron activo desde la pizarra para saber cual mover despues
             if (blackboard.HasKey("patternIndex"))
                 currentPatternIndex = blackboard.GetValue<int>("patternIndex");
 
-            // Si hay target pendiente y no se ha ejecutado aún
             if (blackboard.HasKey("target") && !executed)
                 return 0.9f;
 
-            // Si está en fase de espera antes de reformar
             if (reforming)
                 return 0.5f;
 
             return 0f;
         }
 
+        // El arbitro llama a este metodo cuando este experto gana la insistencia mas alta
+        // Devuelve un array de acciones que se ejecutan en el Update del controlador de escena
         public override Action[] Run(BlackboardSystem blackboard)
         {
-            // FASE 1: romper formación y mandar a todos al objetivo
+            // FASE 1: se ejecuta una sola vez cuando llega un nuevo objetivo a la pizarra
             if (blackboard.HasKey("target") && !executed)
             {
                 Vector3 target = blackboard.GetValue<Vector3>("target");
+
+                // Marcar como ejecutado para no repetir la fase 1
+                // Iniciar el temporizador de espera antes de reformar
                 executed = true;
                 reforming = true;
                 reformTimer = reformDelay;
@@ -65,10 +73,10 @@ namespace AI.Blackboard.Experts
                 {
                     () =>
                     {
-                        // Romper formación
+                        // Desactiva la formacion para que los agentes se muevan libremente
                         formationManager.SetActive(false);
 
-                        // Resetear patrulla y mandar al objetivo
+                        // Cancela la patrulla de cada agente y los dirige al objetivo comun
                         foreach (AgentMovement agent in agents)
                         {
                             agent.ResetPatrol();
@@ -78,9 +86,11 @@ namespace AI.Blackboard.Experts
                 };
             }
 
-            // FASE 2: contar el tiempo y reformar cuando acabe
+            // FASE 2: cuenta el tiempo y reforma cuando el temporizador llega a cero
             if (reforming)
             {
+                // El temporizador se descuenta cada frame dentro de Run
+                // porque GetInsistence devuelve 0.5 y el arbitro sigue llamando a Run
                 reformTimer -= Time.deltaTime;
 
                 if (reformTimer <= 0f)
@@ -88,7 +98,6 @@ namespace AI.Blackboard.Experts
                     reforming = false;
                     executed = false;
 
-                    // Leer el target antes de borrarlo
                     Vector3 newCenter = blackboard.GetValue<Vector3>("target");
                     newCenter.y = 0f;
 
@@ -96,7 +105,8 @@ namespace AI.Blackboard.Experts
                     {
                         () =>
                         {
-                            // Mover el ancla del patrón activo al nuevo centro
+                            // Mueve el ancla del patron activo al nuevo centro
+                            // para que la formacion se reconstituya alrededor del punto del clic
                             switch (currentPatternIndex)
                             {
                                 case 0: (patterns[0] as CirclePattern)?.SetCenter(newCenter); break;
@@ -104,11 +114,11 @@ namespace AI.Blackboard.Experts
                                 case 2: (patterns[2] as LinePattern)?.SetAnchor(newCenter);   break;
                             }
 
-                            // Limpiar la pizarra y reactivar formación
+                            // Limpia el objetivo de la pizarra y reactiva la formacion
                             blackboard.RemoveData("target");
                             formationManager.SetActive(true);
 
-                            // Resetear patrulla para que vayan a los nuevos slots
+                            // Cancela la patrulla para que cada agente vaya a su nuevo slot
                             foreach (AgentMovement agent in agents)
                                 agent.ResetPatrol();
                         }

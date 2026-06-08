@@ -856,7 +856,7 @@ MonoBehaviour:
   spacing: 2
   clickProximityThreshold: 5
   mainCamera: {fileID: 330585545}
-  reformDelay: 10
+  reformDelay: 3
 --- !u!1001 &1949452412
 PrefabInstance:
   m_ObjectHideFlags: 0

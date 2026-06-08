@@ -10,12 +10,17 @@ using AI.Formation.Patterns;
 
 namespace AI.Scenes
 {
+    // Controlador de la Escena 2
+    // Los agentes mantienen una formacion con los tres patrones disponibles
+    // Al hacer clic cerca de un agente se publica un objetivo en la pizarra
+    // El FormationMoveExpert rompe la formacion, manda a todos al objetivo
+    // y pasado reformDelay segundos reactiva la formacion en el nuevo punto
     public class Scene2Controller : MonoBehaviour
     {
         [Header("Agentes")]
         public List<AgentMovement> agents = new List<AgentMovement>();
 
-        [Header("Formación")]
+        [Header("Formacion")]
         public Vector3 formationCenter = Vector3.zero;
         public float circleRadius = 4f;
         public float spacing = 2f;
@@ -33,6 +38,8 @@ namespace AI.Scenes
         private int currentPatternIndex;
         private BlackboardSystem blackboard;
 
+        // Se guardan referencias individuales a cada patron porque el FormationMoveExpert
+        // necesita llamar a SetCenter o SetAnchor para mover el ancla al nuevo punto
         private CirclePattern circlePattern;
         private VPattern vPattern;
         private LinePattern linePattern;
@@ -41,6 +48,7 @@ namespace AI.Scenes
         {
             if (mainCamera == null) mainCamera = Camera.main;
 
+            // Crear los patrones guardando referencia individual a cada uno
             circlePattern = new CirclePattern(formationCenter, circleRadius);
             vPattern = new VPattern(formationCenter, spacing);
             linePattern = new LinePattern(formationCenter, spacing);
@@ -55,6 +63,8 @@ namespace AI.Scenes
                 formationManager.AddAgent(agent);
             }
 
+            // Iniciar la pizarra y publicar el indice del patron activo
+            // para que el FormationMoveExpert sepa cual mover cuando llegue el clic
             blackboard = new BlackboardSystem();
             blackboard.SetData("patternIndex", 0);
             blackboard.RegisterExpert(
@@ -63,12 +73,16 @@ namespace AI.Scenes
 
         void Update()
         {
+            // Cambio de patron con teclas igual que en la Escena 1
             if (Keyboard.current.digit1Key.wasPressedThisFrame) ChangePattern(0);
             if (Keyboard.current.digit2Key.wasPressedThisFrame) ChangePattern(1);
             if (Keyboard.current.digit3Key.wasPressedThisFrame) ChangePattern(2);
 
+            // Detectar clic del raton con el New Input System
             if (Mouse.current.leftButton.wasPressedThisFrame) HandleClick();
 
+            // El arbitro de la pizarra evalua los expertos y ejecuta las acciones
+            // del que mayor insistencia devuelva este frame
             Action[] actions = blackboard.Update();
             if (actions != null)
                 foreach (Action action in actions)
@@ -77,6 +91,8 @@ namespace AI.Scenes
             formationManager.Update();
         }
 
+        // Cambia el patron activo y actualiza el indice en la pizarra
+        // para que el FormationMoveExpert mueva el ancla del patron correcto
         void ChangePattern(int index)
         {
             if (index == currentPatternIndex) return;
@@ -85,6 +101,8 @@ namespace AI.Scenes
             blackboard.SetData("patternIndex", currentPatternIndex);
         }
 
+        // Lanza un raycast desde la camara al plano XZ en la posicion del clic
+        // Si algun agente esta dentro del umbral publica el punto en la pizarra
         void HandleClick()
         {
             Vector2 mousePos = Mouse.current.position.ReadValue();
@@ -96,6 +114,8 @@ namespace AI.Scenes
             Vector3 clickPoint = ray.GetPoint(distance);
             clickPoint.y = 0f;
 
+            // Solo publica el objetivo si el clic cae cerca de algun agente
+            // Esto evita que cualquier clic en el suelo active el comportamiento
             foreach (AgentMovement agent in agents)
             {
                 if (Vector3.Distance(agent.transform.position, clickPoint)
@@ -107,6 +127,7 @@ namespace AI.Scenes
             }
         }
 
+        // Asigna a cada agente la lista de todos los demas como vecinos de separacion
         void SetupSeparation(AgentMovement agent)
         {
             Separation sep = agent.GetComponent<Separation>();
